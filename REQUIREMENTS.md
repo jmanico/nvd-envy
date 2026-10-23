@@ -1,94 +1,33 @@
 # Requirements
 
-## Purpose
+## Purpose and scope
 
-This document defines what the system must do. The project notes are the only source of requirements. This document does not select a design, a data provider, or a method to calculate exploit likelihood.
+NVD Envy is a local command-line program for comparing all published CVE records with NVD entries and highlighting CVEs with high predicted exploit likelihood. It is a public-data research tool, not an asset-specific risk score.
 
-Requirement descriptions use short sentences, consistent terms, and `shall` for mandatory behavior. Technical terms are defined below.
-
-## Source Notes
-
-> * program  that will merge CVE's and NVD's  and show which CVE's do not have a NVD entry
-> * which CVE's are highly likely to be exploited
-
-| Source ID | Source intent |
-| --- | --- |
-| S-01 | Merge CVE records and NVD entries. |
-| S-02 | Show CVE records that do not have an NVD entry. |
-| S-03 | Show CVE records that are highly likely to be exploited. |
-
-## Terms
-
-| Term | Meaning in this document |
-| --- | --- |
-| CVE record | A record for a vulnerability identified by CVE. The record source and required fields are not specified. |
-| NVD entry | An entry in the National Vulnerability Database. The entry source and required fields are not specified. |
-| Merge | Combine CVE records and NVD entries. The matching rules and result structure are not specified. |
-| Exploit likelihood | The likelihood that a vulnerability will be exploited. The measure and time period are not specified. |
-| High exploit likelihood | An exploit likelihood that meets an agreed criterion for high likelihood. That criterion is not yet specified. |
-
-## Functional Requirements
-
-Each requirement has one obligation. Each acceptance check tests that obligation separately. An unresolved test rule is listed as an open question. These questions must be answered before the affected check can have a final pass or fail result.
-
-### FR-001 — Merge records
-
-**Requirement:** The system shall merge CVE records and NVD entries.
-
-**Source:** S-01.
-
-**Acceptance check:** Supply a defined set of CVE records and NVD entries. Compare the merge result with an expected result prepared from the agreed merge rules. The check passes when the results agree.
-
-**Decisions required:** OQ-01, OQ-02, OQ-03.
-
-### FR-002 — Show records without an NVD entry
-
-**Requirement:** The system shall show which CVE records do not have an NVD entry.
-
-**Source:** S-02.
-
-**Acceptance check:** Supply a defined set that contains CVE records with an NVD entry and CVE records without an NVD entry. Use the agreed matching rules to prepare the expected set of records without an NVD entry. The check passes when the system identifies all and only the records in that expected set.
-
-**Decisions required:** OQ-01, OQ-02, OQ-04, OQ-06.
-
-### FR-003 — Show records with high exploit likelihood
-
-**Requirement:** The system shall show which CVE records have high exploit likelihood.
-
-**Source:** S-03.
-
-**Acceptance check:** Supply a defined set of CVE records with the evidence required by the agreed likelihood criterion. Include records that meet the criterion and records that do not meet it. The check passes when the system identifies all and only the records that meet the criterion.
-
-**Decisions required:** OQ-01, OQ-05, OQ-06, OQ-07.
-
-## Non-functional Requirements
-
-The project notes specify no non-functional requirements. Thus, this document defines no mandatory non-functional limits or acceptance checks.
-
-Performance, capacity, availability, security, privacy, accessibility, and supported operating environments remain unresolved in OQ-08. A future requirement for any of these subjects must include a measurable acceptance condition.
-
-## Verification Status
-
-| Requirement | Separate test objective | Status |
+| ID | Requirement | Acceptance check |
 | --- | --- | --- |
-| FR-001 | Confirm the merge result. | Test rules are incomplete. See the listed open questions. |
-| FR-002 | Confirm the set of records without an NVD entry. | Test rules are incomplete. See the listed open questions. |
-| FR-003 | Confirm the set of records with high exploit likelihood. | Test rules are incomplete. See the listed open questions. |
+| FR-001 | The program MUST merge every published record in the official CVE List V5 snapshot with NVD CVE API 2.0 entries by exact CVE ID. | Given published and rejected CVE fixtures and NVD fixtures, the merged set contains each published CVE once, excludes rejected records, and attaches an NVD entry only for an exact ID match. |
+| FR-002 | The program MUST show published CVEs with no entry in a completed NVD snapshot. | Given a complete NVD fixture, the missing-NVD list contains exactly the published CVE IDs absent from it; an incomplete NVD fixture yields no absence claims. |
+| FR-003 | The program MUST show published CVEs whose FIRST EPSS probability is at least 0.10. | Given dated EPSS fixtures around 0.10, the high-likelihood list contains exactly records with scores at or above 0.10; missing scores are never classified high or low. |
+| FR-004 | The program MUST report the provenance and retrieval date of each source used in a result. | A completed run identifies the CVE List release, NVD retrieval time, and EPSS score date. |
+| FR-005 | The program MUST fail without publishing a new result when any source download or completeness check fails and no complete cache younger than 24 hours exists. | With a truncated source and expired cache, the command exits nonzero, explains which source failed, and prints no findings. |
 
-The notes support these three obligations. They do not support fully specified test cases. No requirement is verified by this document.
+## Data and decisions
 
-## Open Questions
+- **CVE universe:** All `PUBLISHED` records in the latest available midnight baseline release of the [official CVE List V5](https://github.com/CVEProject/cvelistV5/blob/main/README.md). `REJECTED` and `RESERVED` records are outside the result universe. A duplicate or malformed ID or invalid archive checksum invalidates the new snapshot.
+- **NVD source:** The [NVD CVE API 2.0](https://nvd.nist.gov/developers/vulnerabilities), retrieved across all pages without a CVE filter. Pages must have contiguous offsets, consistent `totalResults`, and exactly that many unique entries; otherwise the refresh fails. Match exact, case-normalized CVE IDs. NVD-only IDs do not create CVE-list results; count them in a diagnostic summary. Duplicate or malformed NVD IDs invalidate the new snapshot. An absent entry means absent from the completed NVD retrieval, not proof that NVD will never publish it.
+- **Exploit likelihood:** The complete [FIRST EPSS daily CSV](https://www.first.org/epss/data.html). Use its `epss` probability, not its percentile. EPSS estimates exploitation observed in the next 30 days; 0.10 is this project's display threshold, not an official FIRST cutoff. Check all published CVEs, whether or not NVD has an entry. An absent score remains `unknown`; a malformed or duplicate row or invalid gzip checksum invalidates the new EPSS snapshot. A low score is not a safety guarantee. [FIRST explains the measure and lack of a universal threshold](https://www.first.org/epss/faq).
+- **Merge result:** One record per published CVE ID containing the source CVE record, optional exact-ID NVD entry, optional EPSS probability/date, and explicit NVD and likelihood states. Preserve source-specific fields separately; never resolve conflicting source values by overwriting one with the other.
+- **Timing:** On each invocation, use a complete local snapshot bundle only while every source retrieval in it is less than 24 hours old; otherwise download a fresh CVE baseline, all NVD pages, and the latest EPSS CSV. Publish a replacement bundle only after every source validates. Show each source's actual date because publication times need not coincide. No background scheduler or historical store is required.
+- **Output:** Print a summary and two CVE-ID-sorted groups: “No NVD entry in retrieved snapshot” and “EPSS ≥ 10% (next 30 days).” An ID can appear in both groups. Each row shows CVE ID, NVD state, EPSS probability or `unknown`, and relevant source dates. Print `0 records` for an empty group. Print data errors to stderr and exit nonzero; do not emit findings based on incomplete data.
 
-| ID | Unresolved decision | Affected requirements |
-| --- | --- | --- |
-| OQ-01 | Which CVE and NVD data sources must the system use? Which records are in scope? Which fields must be available? | FR-001, FR-002, FR-003 |
-| OQ-02 | What rule determines that a CVE record has a corresponding NVD entry? How must the system treat duplicate records and identifiers that are missing or not valid? | FR-001, FR-002 |
-| OQ-03 | What must the merge result contain? Which fields must it retain? How must it treat conflicting values, CVE records without NVD entries, and NVD entries without corresponding CVE records? | FR-001 |
-| OQ-04 | What data coverage and data age are sufficient to conclude that an NVD entry does not exist? How must the system treat incomplete or unavailable NVD data? | FR-002 |
-| OQ-05 | What evidence or method determines exploit likelihood? What criterion makes that likelihood high? What time period does the likelihood cover? | FR-003 |
-| OQ-06 | How must the system show each result? Which information must it show for each identified CVE record? | FR-002, FR-003 |
-| OQ-07 | Must the likelihood check cover all CVE records or only records without an NVD entry? How must the system treat missing, old, or conflicting likelihood evidence? | FR-003 |
-| OQ-08 | What measurable non-functional requirements apply? Specify any required response times, data volumes, availability, security controls, privacy controls, accessibility criteria, and operating environments. | Non-functional requirements |
-| OQ-09 | When must the system obtain data and produce results? Are repeated runs or data updates required? | FR-001, FR-002, FR-003 |
+## Operating and quality requirements
 
-No answer to an open question is assumed. Add or revise requirements when these decisions are made.
+- The target is a local terminal on a supported Node.js 26 host with outbound HTTPS and enough local space for full public-source snapshots. Store the cache under the invoking user's home directory in `.cache/nvd-envy`, with user-only access. No web, mobile, API, account, session, or server surface is required. The operator starts each run explicitly.
+- Handle the full published CVE corpus with bounded streaming or pagination rather than loading all raw source documents at once. A successful run must complete all records, with no arbitrary top-N cut-off. No response-time or availability service-level target applies to this local command.
+- Treat downloaded records as untrusted. No personal or regulated data is intentionally collected. Keep cache and result files local to the invoking user; do not send CVE findings to another service. Use official HTTPS source locations.
+- Terminal output uses plain text, stable headings, intact identifiers, and explicit status words. It must remain readable without color or terminal interaction.
+
+## Source notes and decision basis
+
+The initial project notes asked to merge CVEs with NVD, show gaps, and identify CVEs likely to be exploited (S-01–S-03). The user selected a command-line application and all available CVEs, then delegated remaining decisions. The named sources and 0.10 threshold are project decisions made under that delegation; the external source documentation does not mandate the threshold.
