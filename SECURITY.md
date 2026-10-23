@@ -2,54 +2,57 @@
 
 ## Secure-Coding Inputs
 
-- Read `REQUIREMENTS.md`, `DESIGN.md`, and `ARCHITECTURE.md`. No existing `SECURITY.md` was present. The candidate security notes are the Manicode pack list in the task.
-- Confirmed: the system merges CVE records with NVD entries (FR-001), shows records without an NVD entry (FR-002), and shows records with high exploit likelihood (FR-003). `ARCHITECTURE.md` proposes source adapters, a classification core, and result delivery across external-data and possible client boundaries. `DESIGN.md` forbids presenting unresolved evidence as a confirmed result.
-- Confirmed developer inputs recorded in `ARCHITECTURE.md`: “Node.js” as server framework, “fastify” as server runtime, and React.js as client framework. Node.js and Fastify have reversed technical roles in those labels; resolution is TO BE DECIDED. Versions are UNKNOWN. A graphical client surface is UNKNOWN.
-- Sources, record schema, matching, coverage, likelihood method, presentation medium, access model, persistence, deployment environment, and measurable security expectations remain TO BE DECIDED (`REQUIREMENTS.md` OQ-01–OQ-09; `ARCHITECTURE.md` AQ-1–AQ-9). These gaps do not establish candidate-pack applicability.
+- Read `REQUIREMENTS.md`, `ARCHITECTURE.md`, and `DESIGN.md`. The confirmed surface is a local Node.js 26 command-line program using three public HTTPS data sources and a local cache. There is no server, browser client, account, session, or database.
+- The source data is untrusted until the adapters validate it. A complete validated snapshot is required for an NVD absence claim. The core owns classification, and the terminal presenter owns only output formatting.
 
 ## Selected Manicode Prompts
 
 - Corpus root: `/Users/jmanico/Dropbox/github/aegis/secure-coding-knowledge`.
-- Direct selections: **none**. Node.js, Fastify, and React.js are named without versions; `js/nodejs/26` and `js/fastify/5.12` cannot be selected. React.js does not confirm React Native, so `js/react-native/0.87` cannot be selected. No authoritative document confirms Better Auth, Keycloak, Android SDK, iOS SDK, Cedar, OpenFGA, SpiceDB, Open Policy Agent, Zod, Prisma, or Dockerfile, let alone their candidate versions. All direct candidates remain unselected pending OD-1 or OD-2.
-- Transitive eligibility checked from each candidate's manifest. `js/nodejs/26` includes `js/javascript/ES2026`; `js/react-native/0.87` includes `js/react/19`, `js/typescript/7`, then `js/javascript/ES2026`; `js/fastify/5.12`, `js/better-auth/1.7`, and `js/prisma/7.10` include `js/nodejs/24`, `js/typescript/7`, then `js/javascript/ES2026`; `js/zod/4` includes `js/typescript/7`, then `js/javascript/ES2026`; `jvm/keycloak/26.7` includes `jvm/java/25`; `jvm/android-sdk/37` includes `jvm/kotlin/2.4`; `swift/ios-sdk/27` includes `swift/swift/6.4`. The four `policy/*` candidates and `infra/dockerfile/1` have no parents. No parent is independently selected. In particular, Fastify's candidate parent Node.js 24 does not establish Node.js 24 for this project.
-- Ordered composition: **none** (zero direct and zero transitive packs). Consequently there are no selected pack prompt or source paths. Candidate files were inspected as `content/<pack>/manifest.json`; any future selected pack must list both `content/<pack>/prompt.md` and `content/<pack>/sources.md` here, in resolver order.
-- Preamble, listed separately: `content/preamble.md`. It applies as general guidance without selecting a technology pack.
+- Direct selection: `js/nodejs/26`, confirmed by `ARCHITECTURE.md` Required Architecture Inputs and Technology decisions. Prompt `content/js/nodejs/26/prompt.md`; sources `content/js/nodejs/26/sources.md`.
+- Ordered composition: (1) transitive `js/javascript/ES2026`, prompt `content/js/javascript/ES2026/prompt.md`, sources `content/js/javascript/ES2026/sources.md`; (2) direct `js/nodejs/26`, prompt and sources above. Resolved with `scripts/resolve_prompt.py --json js/nodejs/26`.
+- Preamble, separately: `content/preamble.md`.
+- Fastify, React Native, Better Auth, Keycloak, Android SDK, iOS SDK, Cedar, OpenFGA, SpiceDB, Open Policy Agent, Zod, Prisma, and Dockerfile candidates are not selected because their technologies are absent from the chosen architecture. Their transitive packs are not selected through them.
 
 ## Secure-Coding Rules
 
 **SC-001 — Keep classifications in the core**
 - **Status:** ACTIVE
-- **Rule:** The Fastify result-delivery layer and any client MUST use the core's NVD-presence and likelihood outcomes; they MUST NOT independently infer those outcomes from missing fields or display values.
-- **Enforcement:** Proposed merge and classification core; Fastify result delivery; conditional presentation adapter.
-- **Evidence:** `ARCHITECTURE.md` DR-2 and Components and Flows; `DESIGN.md` Components; `content/preamble.md` (apply rules to touched code and verify access or validation logic).
-- **Verification:** For a test input with unresolved matching or likelihood evidence, result delivery and any client preserve the core's unresolved state and do not emit a confirmed absence or high-likelihood label.
+- **Rule:** The CLI and terminal presenter MUST use the core's NVD-presence and EPSS outcomes and MUST NOT infer them from missing display fields.
+- **Enforcement:** Merge and classification core; terminal presenter.
+- **Evidence:** `ARCHITECTURE.md` DR-2; `REQUIREMENTS.md` FR-002–FR-003; `content/preamble.md`.
+- **Verification:** An incomplete NVD fixture yields no absence finding; an absent EPSS score yields `unknown`, never high or low.
 
-**SC-002 — Keep source formats outside the core**
+**SC-002 — Validate source data before use**
 - **Status:** ACTIVE
-- **Rule:** Source adapters MUST interpret externally obtained records before passing them to the core; the core MUST NOT use source-specific parsing or transport behavior to decide matching or classification.
-- **Enforcement:** Proposed source-adapter boundary and merge and classification core.
-- **Evidence:** `ARCHITECTURE.md` Trust boundaries and DR-1; `REQUIREMENTS.md` FR-001–FR-003; `content/preamble.md` (apply rules to touched code and verify validation logic).
-- **Verification:** A source-format change is handled in its adapter, and a malformed or uninterpretable source record cannot produce a confirmed NVD-absence or high-likelihood outcome.
+- **Rule:** Source adapters MUST bound and validate downloaded JSON/CSV and reject malformed or duplicate CVE IDs, unexpected states, invalid EPSS probabilities, and incomplete NVD pagination before publishing a snapshot.
+- **Enforcement:** CVE, NVD, and EPSS source adapters at the network-to-snapshot boundary.
+- **Evidence:** `REQUIREMENTS.md` Data and decisions; `ARCHITECTURE.md` Components and data flow; `content/js/javascript/ES2026/prompt.md` Validation and Structured data and queries; `content/js/nodejs/26/prompt.md` Filesystem and paths.
+- **Verification:** Oversized, malformed, duplicated, out-of-range, or truncated fixtures are rejected and cannot replace the last complete snapshot.
 
-**SC-003 — Preserve uncertainty in rendered results**
+**SC-003 — Render untrusted text safely**
 - **Status:** ACTIVE
-- **Rule:** A presentation implementation MUST NOT render incomplete NVD coverage or unresolved likelihood evidence as a confirmed absence or high-likelihood finding.
-- **Enforcement:** Conditional presentation adapter, with result-state authority in the core.
-- **Evidence:** `DESIGN.md` Components; `ARCHITECTURE.md` Main flow and DR-2; `content/preamble.md` (apply rules to touched code and run relevant checks).
-- **Verification:** Rendered results for incomplete coverage and missing likelihood evidence use unresolved states; neither case displays a confirmed absence or high-likelihood label.
+- **Rule:** Terminal output MUST treat downloaded text as data and neutralize control characters before printing it; it MUST NOT execute source-provided content or use source text as a format string.
+- **Enforcement:** Terminal presenter and error formatter.
+- **Evidence:** `DESIGN.md` Surface and Result presentation; `content/js/javascript/ES2026/prompt.md` Asynchrony and logs; `content/js/nodejs/26/prompt.md` Child processes, addons, and FFI.
+- **Verification:** A fixture containing newline, escape, or other control characters cannot add a forged finding or change terminal formatting.
 
-**SC-004 — Access enforcement**
-- **Status:** BLOCKED — Access rules and whether authentication or sessions exist are TO BE DECIDED (OD-3). No implementation instruction applies yet.
+**SC-004 — Keep the run local**
+- **Status:** ACTIVE
+- **Rule:** The program MUST NOT start an inbound listener, collect credentials, or send CVE findings to any destination; network requests MUST target only the three selected public data sources and approved redirects.
+- **Enforcement:** CLI entry and source adapters.
+- **Evidence:** `REQUIREMENTS.md` Operating and quality requirements; `ARCHITECTURE.md` Required Architecture Inputs and DR-5; `content/js/javascript/ES2026/prompt.md` URLs and SSRF.
+- **Verification:** Network interception shows only source downloads; no listening socket or outbound results request is created.
 
-**SC-005 — Version-specific implementation controls**
-- **Status:** BLOCKED — Confirmed technologies lack versions and other candidate technologies lack adoption evidence (OD-1, OD-2). No candidate prompt can supply an applicable implementation rule yet.
+**SC-005 — Use a supported runtime**
+- **Status:** ACTIVE
+- **Rule:** Builds and releases MUST run an up-to-date Node.js 26 security release and MUST fail the runtime check when the installed 26.x version is affected by a known security advisory.
+- **Enforcement:** Build and release checks for the CLI.
+- **Evidence:** `ARCHITECTURE.md` Technology decisions; `content/js/nodejs/26/prompt.md` Release line and upgrade posture; `content/js/nodejs/26/sources.md` Node.js security releases and runtime-check references.
+- **Verification:** A vulnerable runtime fixture fails the release check; the checked and packaged runtime versions are recorded.
 
-**SC-006 — Source and result handling controls**
-- **Status:** BLOCKED — Source identity, required fields, data sensitivity, coverage, freshness, persistence, and security obligations are TO BE DECIDED (OD-4). Specific validation, storage, and retention rules cannot yet be stated.
-
-## Open Security Decisions
-
-- **OD-1:** Confirm the Node.js/Fastify role-label conflict and exact versions, if chosen. Evidence: corrected authoritative architecture inputs or implementation decision. Affects SC-005; candidates `js/nodejs/26`, `js/fastify/5.12` and their transitive parents. Owner: UNKNOWN.
-- **OD-2:** Confirm the target presentation surface, client technology and version, and adoption and versions of any other candidate technology. Evidence: updated `REQUIREMENTS.md`/`ARCHITECTURE.md` and, for browser behavior, `DESIGN.md`. Affects SC-005 and client coverage; candidates `js/react-native/0.87`, `js/better-auth/1.7`, `jvm/keycloak/26.7`, `jvm/android-sdk/37`, `swift/ios-sdk/27`, `policy/cedar/4.12`, `policy/openfga/1.19`, `policy/spicedb/1.56`, `policy/open-policy-agent/1.20`, `js/zod/4`, `js/prisma/7.10`, and `infra/dockerfile/1` with their transitive parents. Owner: UNKNOWN.
-- **OD-3:** Decide whether access restrictions, authentication, sessions, or authorization are required and where they apply. Evidence: behavior and users in `REQUIREMENTS.md`, then interfaces in `ARCHITECTURE.md`. Affects SC-004 and auth-related candidate packs. Owner: UNKNOWN.
-- **OD-4:** Decide data sources and fields, matching and coverage rules, likelihood evidence, data sensitivity, persistence, freshness, and measurable security obligations. Evidence: resolved `REQUIREMENTS.md` OQ-01–OQ-09 and corresponding architecture boundaries. Affects SC-006 and refinement of SC-001–SC-003. Owner: UNKNOWN.
+**SC-006 — Publish only complete snapshots**
+- **Status:** ACTIVE
+- **Rule:** The snapshot manager MUST write a refreshed bundle privately and replace the usable cache only after all three source snapshots pass validation; it MUST NOT emit findings from an expired or partial bundle.
+- **Enforcement:** Snapshot manager and CLI exit path.
+- **Evidence:** `REQUIREMENTS.md` FR-004–FR-005; `ARCHITECTURE.md` DR-4; `content/js/nodejs/26/prompt.md` Filesystem and paths.
+- **Verification:** Interrupting or corrupting a refresh preserves the prior complete cache, and an expired cache causes a nonzero exit without findings.
